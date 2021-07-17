@@ -151,7 +151,24 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
 }
+//Count # of used slots to count number of processes
+uint64 countprocs(void) 
+{
+    
+  struct proc *p;
+  uint64 count = 0;
 
+  for(p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if(p->state != UNUSED) {
+       count++;
+       release(&p -> lock);
+    } else {
+      release(&p->lock);
+     }
+  }
+return(count);
+}
 // Create a user page table for a given process,
 // with no user memory, but with trampoline pages.
 pagetable_t
@@ -296,6 +313,8 @@ fork(void)
   np->state = RUNNABLE;
 
   release(&np->lock);
+  
+  np->tracemask = p->tracemask;
 
   return pid;
 }
