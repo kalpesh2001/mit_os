@@ -20,6 +20,9 @@ static void wakeup1(struct proc *chan);
 static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
+extern pagetable_t kvmcreate(void);
+extern void kvminithart();
+extern void kvmfree(pagetable_t);
 
 // initialize the proc table at boot time.
 void
@@ -121,17 +124,19 @@ found:
     return 0;
   }
 
+  //Added to create per process kernel pagetable
+  p->kvmpagetable = kvmcreate();
+ 
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+  //vmprint(p->kvmpagetable);
   return p;
 }
 
 // free a proc structure and the data hanging from it,
-// including user pages.
 // p->lock must be held.
 static void
 freeproc(struct proc *p)
@@ -150,6 +155,8 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  //added to free kernel memory pages for this process
+  kvmfree(p->kvmpagetable);
 }
 
 // Create a user page table for a given process,
@@ -473,12 +480,15 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        w_satp(MAKE_SATP(p->kvmpagetable));
+        sfence_vma();
+        //printf("Process selected for run on CPU: %d %d\n", p->pid, cpuid());
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
-
+        kvminithart();
         found = 1;
       }
       release(&p->lock);

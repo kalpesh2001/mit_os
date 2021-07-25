@@ -260,8 +260,9 @@ GDBPORT = $(shell expr `id -u` % 5000 + 25000)
 QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::$(GDBPORT)"; \
 	else echo "-s -p $(GDBPORT)"; fi)
+# tempory change to 1 instead of 3
 ifndef CPUS
-CPUS := 3
+CPUS := 3 
 endif
 ifeq ($(LAB),fs)
 CPUS := 1

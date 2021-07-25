@@ -440,3 +440,119 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+char *sep[3] = {"..", ".. ..", ".. .. .."};
+int level = -1;
+int prnflg = 1 ;
+
+void 
+vmprint(pagetable_t pagetable) 
+{
+ if(prnflg) {
+   prnflg = 0;
+   printf("page table %p\n", pagetable);
+  }
+ level++;
+for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+      // this PTE toints to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      printf("%s%d: pte %p pa %p\n",sep[level], i, pte,child);
+      vmprint((pagetable_t)child);
+    } else if(pte & PTE_V){
+       //Child leaf
+      uint64 child = PTE2PA(pte);
+      printf("%s%d: pte %p pa %p\n", sep[level], i, pte,child);
+    }
+  }
+  level--;
+}
+// Function to intialize kernel pagetable for process
+// Currently not in use
+pagetable_t
+prockvminit()
+{
+  pagetable_t kvm_pagetable;
+  kvm_pagetable = (pagetable_t) kalloc();
+  memset(kvm_pagetable, 0, PGSIZE);
+
+  //if(mappages(kernel_pagetable, va, sz, pa, perm) != 0)
+  // uart registers
+  //kvmmap(UART0, UART0, PGSIZE, PTE_R | PTE_W);
+  if (mappages(kvm_pagetable, UART0, PGSIZE, UART0, PTE_R | PTE_W) != 0)
+   panic("prockvminit");
+
+  // virtio mmio disk interface
+  //kvmmap(VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+  
+  if (mappages(kvm_pagetable, VIRTIO0, PGSIZE, VIRTIO0, PTE_R | PTE_W) != 0)
+   panic("prockvminit");
+
+  // CLINT
+  //kvmmap(CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+  if (mappages(kvm_pagetable, CLINT, 0x10000, CLINT, PTE_R | PTE_W) != 0)
+   panic("prockvminit");
+
+  // PLIC
+  //kvmmap(PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+  if (mappages(kvm_pagetable, PLIC, 0x400000, PLIC, PTE_R | PTE_W) != 0)
+   panic("prockvminit");
+
+  // map kernel text executable and read-only.
+  //kvmmap(KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+  if (mappages(kvm_pagetable, KERNBASE, (uint64)etext-KERNBASE, KERNBASE, PTE_R | PTE_X) != 0)
+   panic("prockvminit");
+
+  // map kernel data and the physical RAM we'll make use of.
+  // kvmmap((uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+  if (mappages(kvm_pagetable, (uint64)etext, PHYSTOP-(uint64)etext, (uint64)etext, PTE_R | PTE_W) != 0)
+   panic("prockvminit");
+
+  // map the trampoline for trap entry/exit to
+  // the highest virtual address in the kernel.
+  //kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+  if (mappages(kvm_pagetable, TRAMPOLINE, PGSIZE, (uint64)trampoline, PTE_R | PTE_X) != 0)
+   panic("prockvminit");
+  return kvm_pagetable;
+}
+
+pagetable_t kvmcreate()
+{
+     pagetable_t pagetable;
+     int i;
+     
+     pagetable = uvmcreate();
+     for (i = 1; i < 512; i++) 
+        pagetable[i] =  kernel_pagetable[i];
+     
+  if (mappages(pagetable, UART0, PGSIZE, UART0, PTE_R | PTE_W) != 0)
+   panic("kvmcreate");
+  if (mappages(pagetable, VIRTIO0, PGSIZE, VIRTIO0, PTE_R | PTE_W) != 0)
+   panic("kvmcreate");
+  if (mappages(pagetable, CLINT, 0x10000, CLINT, PTE_R | PTE_W) != 0)
+   panic("kvmcreate");
+  if (mappages(pagetable, PLIC, 0x400000, PLIC, PTE_R | PTE_W) != 0)
+   panic("kvmcreate");
+  
+  return pagetable;
+}
+
+void kvmfree(pagetable_t kpagetable) 
+{
+    pte_t pte = kpagetable[0];
+    pagetable_t level1 = (pagetable_t)PTE2PA(pte); 
+    
+    for(int i = 0; i < 512; i++) {
+      pte_t pte = level1[i];
+      if (pte & PTE_V) {
+        uint64 level2 = PTE2PA(pte);
+        kfree((void*) level2);
+        level1[i] = 0;
+       }
+    }
+ kfree((void *) level1);
+ kfree((void *) kpagetable);
+}
+        
+     
