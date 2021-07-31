@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 #include "elf.h"
+extern void kvmmapuser(int, pagetable_t, pagetable_t, int, int); 
 
 static int loadseg(pde_t *pgdir, uint64 addr, struct inode *ip, uint offset, uint sz);
 
@@ -118,6 +119,8 @@ exec(char *path, char **argv)
 //added to print pagetable
 //  if (p->pid == 1) 
 //   vmprint(p->pagetable);
+//Map user table to kernel table before returning
+ kvmmapuser(p->pid, p->kvmpagetable, p->pagetable, p->sz,0);
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:

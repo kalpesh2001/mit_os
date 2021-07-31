@@ -1,4 +1,4 @@
-#include "param.h"
+#include "param.h" 
 #include "types.h"
 #include "memlayout.h"
 #include "elf.h"
@@ -14,6 +14,9 @@ pagetable_t kernel_pagetable;
 extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
+
+extern int copyin_new(pagetable_t , char *, uint64 , uint64);
+extern int copyinstr_new(pagetable_t, char*, uint64, uint64);
 
 /*
  * create a direct-map page table for the kernel.
@@ -68,6 +71,7 @@ kvminithart()
 //   21..29 -- 9 bits of level-1 index.
 //   12..20 -- 9 bits of level-0 index.
 //    0..11 -- 12 bits of byte offset within the page.
+//KP: PX(level, va): shifts va by 30, 21 and 12 bytes and gets the 9 bit offset from va. Find offset for each level.
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
@@ -77,7 +81,7 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
   for(int level = 2; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
     if(*pte & PTE_V) {
-      pagetable = (pagetable_t)PTE2PA(*pte);
+      pagetable = (pagetable_t)PTE2PA(*pte); //pagetable is set to physical address of next level
     } else {
       if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
         return 0;
@@ -379,6 +383,8 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
+  return copyin_new(pagetable, dst, srcva, len);
+/***
   uint64 n, va0, pa0;
 
   while(len > 0){
@@ -396,6 +402,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
     srcva = va0 + PGSIZE;
   }
   return 0;
+ ***/
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -405,6 +412,8 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
+  return copyinstr_new(pagetable, dst, srcva, max);
+/*
   uint64 n, va0, pa0;
   int got_null = 0;
 
@@ -438,7 +447,8 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return 0;
   } else {
     return -1;
-  }
+  } 
+*/
 }
 
 char *sep[3] = {"..", ".. ..", ".. .. .."};
@@ -555,4 +565,34 @@ void kvmfree(pagetable_t kpagetable)
  kfree((void *) kpagetable);
 }
         
-     
+// Copy user page table into kernel page table
+
+void 
+kvmmapuser(int pid, pagetable_t kpagetable, pagetable_t upagetable, uint64 newsz, uint64 oldsz) {
+    pte_t *kpage;
+    pte_t *upage;
+    uint64 va;
+
+    if (newsz >= PLIC)
+     panic("kvmmapuser: newsz larger than PLIC");
+
+    for(va = oldsz; va < newsz; va += PGSIZE) 
+     {
+       upage = walk(upagetable, va, 0);
+        if(upage == 0) 
+          {
+          printf("kvmmapuser: 0x%x 0x%x\n", va, newsz);
+          panic("kvmmapuser: No mapped user page");
+         }
+        if ((*upage & PTE_V) == 0) {
+          printf("kvmmapuser: no valid pte: 0x%x 0x%x\n", va, newsz);
+          panic("kvmmapuser: no valid user pte");
+         }
+       kpage = walk(kpagetable, va, 1);
+          if(kpage == 0) 
+             printf("kvmmapuser: no kpage table\n");
+          *kpage = *upage;
+          *kpage &= ~(PTE_X|PTE_W|PTE_U);
+       } 
+}
+      

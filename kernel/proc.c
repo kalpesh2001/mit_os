@@ -23,6 +23,7 @@ extern char trampoline[]; // trampoline.S
 extern pagetable_t kvmcreate(void);
 extern void kvminithart();
 extern void kvmfree(pagetable_t);
+extern void kvmmapuser(int, pagetable_t, pagetable_t, int, int);
 
 // initialize the proc table at boot time.
 void
@@ -236,6 +237,8 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+  //Added to map user pagetable to its kernel page table
+  kvmmapuser(p->pid, p->kvmpagetable, p->pagetable, p->sz,0);
 
   release(&p->lock);
 }
@@ -253,6 +256,8 @@ growproc(int n)
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
+  //map pages into kernel space
+  kvmmapuser(p->pid, p->kvmpagetable, p->pagetable, sz, p->sz);
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
@@ -301,6 +306,9 @@ fork(void)
   pid = np->pid;
 
   np->state = RUNNABLE;
+
+  //Added to map user pagetable to its kernel page table
+  kvmmapuser(np->pid, np->kvmpagetable, np->pagetable, np->sz,0);
 
   release(&np->lock);
 
@@ -707,3 +715,4 @@ procdump(void)
     printf("\n");
   }
 }
+
