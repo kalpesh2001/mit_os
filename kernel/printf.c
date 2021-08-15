@@ -121,6 +121,7 @@ panic(char *s)
   printf("panic: ");
   printf(s);
   printf("\n");
+  backtrace();
   panicked = 1; // freeze uart output from other CPUs
   for(;;)
     ;
@@ -131,4 +132,28 @@ printfinit(void)
 {
   initlock(&pr.lock, "pr");
   pr.locking = 1;
+}
+
+void backtrace() 
+{
+//invarient is that diff  == 4096 
+    uint64* ret_addr, *new_fp; 
+    uint64 current_fp = r_fp();
+    int diff;
+   // printf("Initial fp: %p\n", current_fp);
+    uint64 lowest = PGROUNDDOWN(current_fp);
+    diff = current_fp - lowest;
+   //printf("Initial difference: %d\n", diff);
+   printf("Backtrace:\n");
+
+    while(diff <  PGSIZE) {
+      ret_addr = (uint64*) (current_fp - 8); //This was the breakthrough. Cast result has pointer variable
+      printf("Return address: %p\n", *ret_addr);
+      new_fp = (uint64*)(current_fp - 16);
+    //  printf("Updated fp: %p\n", *new_fp);
+      diff = *new_fp - lowest;
+    //  printf("Updated difference: %d\n", diff);
+      current_fp = *new_fp;
+  }
+      
 }

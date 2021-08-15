@@ -175,6 +175,7 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
+	$U/_alarmtest
 
 
 
@@ -260,8 +261,9 @@ GDBPORT = $(shell expr `id -u` % 5000 + 25000)
 QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::$(GDBPORT)"; \
 	else echo "-s -p $(GDBPORT)"; fi)
+# change to 1 from 3 for debugging
 ifndef CPUS
-CPUS := 3
+CPUS := 1 
 endif
 ifeq ($(LAB),fs)
 CPUS := 1
