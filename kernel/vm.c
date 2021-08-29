@@ -71,15 +71,15 @@ kvminithart()
 //   21..29 -- 9 bits of level-1 index.
 //   12..20 -- 9 bits of level-0 index.
 //    0..11 -- 12 bits of byte offset within the page.
-//KP: PX(level, va): shifts va by 30, 21 and 12 bytes and gets the 9 bit offset from va. Find offset for each level.
+//KP: PX(level, va): Find offsets for levels 2, 1 and 0. shifts va by 30, 21 and 12 bytes and gets the 9 bit offset to left.
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc)
 {
   if(va >= MAXVA)
     panic("walk");
 
-  for(int level = 2; level > 0; level--) {
-    pte_t *pte = &pagetable[PX(level, va)];
+  for(int level = 2; level > 0; level--) { //Go through level = 2, level = 1, level = 0
+    pte_t *pte = &pagetable[PX(level, va)]; //&pagetable[index] returns address of next level pte
     if(*pte & PTE_V) {
       pagetable = (pagetable_t)PTE2PA(*pte); //pagetable is set to physical address of next level
     } else {
@@ -89,7 +89,7 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
       *pte = PA2PTE(pagetable) | PTE_V;
     }
   }
-  return &pagetable[PX(0, va)];
+  return &pagetable[PX(0, va)]; //Last 12 bits into physical page
 }
 
 // Look up a virtual address, return the physical address,
